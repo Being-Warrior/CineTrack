@@ -32,7 +32,7 @@ const Home = () => {
           {user ? (
             <>
               <Link to="/dashboard" className="btn-primary">Go to Dashboard</Link>
-              <Link to="/dashboard" className="btn-ghost">Dashboard</Link>
+              
             </>
           ) : (
             <>
