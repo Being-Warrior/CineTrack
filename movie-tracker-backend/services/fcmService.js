@@ -1,14 +1,15 @@
 import admin from 'firebase-admin';
-import { createRequire } from 'module';
 import db from '../config/db.js';
 
-const require = createRequire(import.meta.url);
-
-// Initialize Firebase Admin SDK once
+// Initialize Firebase Admin SDK once — credentials from env variables
 if (!admin.apps.length) {
-  const serviceAccount = require('../firebase-service-account.json');
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert({
+      projectId:   process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      // Replace \n with actual newlines in the private key
+      privateKey:  process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
   });
 }
 
