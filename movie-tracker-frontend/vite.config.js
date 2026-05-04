@@ -8,7 +8,7 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: "all",
     proxy: {
-      "/api": "http://10.203.137.216:5000",
+      "/api": "https://cine-track-eight.vercel.app/",
     },
   },
 });
