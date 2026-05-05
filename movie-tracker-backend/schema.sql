@@ -1,7 +1,9 @@
 -- Run this file in your MySQL client
 -- mysql -u root -p < schema.sql
+
 CREATE DATABASE IF NOT EXISTS movie_tracker;
 USE movie_tracker;
+
 CREATE TABLE IF NOT EXISTS users (
   user_id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
@@ -9,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
 CREATE TABLE IF NOT EXISTS content (
   content_id INT AUTO_INCREMENT PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
@@ -19,19 +22,41 @@ CREATE TABLE IF NOT EXISTS content (
   overview TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
 CREATE TABLE IF NOT EXISTS user_content (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   content_id INT NOT NULL,
   status ENUM('watchlist', 'watching', 'completed', 'dropped') NOT NULL,
-  rating TINYINT CHECK (
-    rating BETWEEN 1 AND 10
-  ),
+  rating TINYINT CHECK (rating BETWEEN 1 AND 10),
   platform VARCHAR(100),
   notes TEXT,
   added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_user_content (user_id, content_id),
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  FOREIGN KEY (content_id) REFERENCES content(content_id) ON DELETE CASCADE
+);
+
+-- Stores FCM push token per user device
+CREATE TABLE IF NOT EXISTS user_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  fcm_token TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Stores one-time magic link tokens for email status actions
+CREATE TABLE IF NOT EXISTS notification_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  content_id INT NOT NULL,
+  action_status VARCHAR(20) NOT NULL,
+  token VARCHAR(255) UNIQUE NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
   FOREIGN KEY (content_id) REFERENCES content(content_id) ON DELETE CASCADE
 );

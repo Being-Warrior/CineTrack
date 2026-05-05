@@ -174,7 +174,7 @@ export const deleteContent = async (req, res) => {
 // Get all user content with optional status filter
 export const getUserContent = async (req, res) => {
   const { user_id } = req.user;
-  const { status } = req.query;
+  const { status, search } = req.query;
 
   try {
     let query = `
@@ -190,6 +190,10 @@ export const getUserContent = async (req, res) => {
       query += " AND uc.status = ?";
       params.push(status);
     }
+    if (search) {
+      query += " AND c.title LIKE ?";
+      params.push(`%${search}%`);
+    }
     query += " ORDER BY uc.updated_at DESC";
 
     const [rows] = await db.query(query, params);
@@ -197,6 +201,109 @@ export const getUserContent = async (req, res) => {
   } catch (err) {
     console.error("getUserContent error:", err.message);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Search TMDB for new titles to add (auto-fill form)
+export const searchTMDB = async (req, res) => {
+  const { query } = req.query;
+  if (!query)
+    return res.status(400).json({ message: "query param is required" });
+
+  try {
+    const { data } = await axios.get(
+      "https://api.themoviedb.org/3/search/multi",
+      {
+        params: {
+          api_key: process.env.TMDB_API_KEY,
+          query,
+          language: "en-US",
+          page: 1,
+        },
+      },
+    );
+
+    const results = (data.results || [])
+      .filter((item) => item.media_type === "movie" || item.media_type === "tv")
+      .slice(0, 8)
+      .map((item) => ({
+        tmdb_id: item.id,
+        title: item.title || item.name,
+        content_type: item.media_type === "tv" ? "series" : "movie",
+        release_year:
+          (item.release_date || item.first_air_date || "").substring(0, 4) ||
+          "",
+        genre: "", // TMDB basic search doesn't return genre names, only ids
+        poster_url: item.poster_path
+          ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
+          : "",
+        overview: item.overview || "",
+      }));
+
+    res.json(results);
+  } catch (err) {
+    console.error("searchTMDB error:", err.message);
+    res.status(500).json({ message: "TMDB search failed" });
+  }
+};
+
+// Get full movie/series details from OMDB via TMDB id
+export const getOMDBDetails = async (req, res) => {
+  const { tmdb_id } = req.params;
+  const { type = "movie" } = req.query; // 'movie' or 'series'
+
+  if (!tmdb_id) return res.status(400).json({ message: "tmdb_id is required" });
+
+  try {
+    // Step 1 — get imdb_id from TMDB external_ids endpoint
+    const tmdbEndpoint =
+      type === "series"
+        ? `https://api.themoviedb.org/3/tv/${tmdb_id}/external_ids`
+        : `https://api.themoviedb.org/3/movie/${tmdb_id}/external_ids`;
+
+    const { data: externalIds } = await axios.get(tmdbEndpoint, {
+      params: { api_key: process.env.TMDB_API_KEY },
+    });
+
+    const imdb_id = externalIds.imdb_id;
+    if (!imdb_id)
+      return res
+        .status(404)
+        .json({ message: "IMDB ID not found for this title" });
+
+    // Step 2 — fetch full details from OMDB using imdb_id
+    const { data: omdb } = await axios.get("https://www.omdbapi.com/", {
+      params: {
+        i: imdb_id,
+        apikey: process.env.OMDB_API_KEY,
+        plot: "short",
+      },
+    });
+
+    if (omdb.Response === "False")
+      return res
+        .status(404)
+        .json({ message: omdb.Error || "Not found on OMDB" });
+
+    // Step 3 — normalize and return
+    const result = {
+      tmdb_id: Number(tmdb_id),
+      title: omdb.Title || "",
+      content_type: omdb.Type === "series" ? "series" : "movie",
+      release_year: (omdb.Year || "").substring(0, 4),
+      genre: omdb.Genre ? omdb.Genre.split(",")[0].trim() : "", // first genre only
+      overview: omdb.Plot !== "N/A" ? omdb.Plot : "",
+      poster_url: omdb.Poster !== "N/A" ? omdb.Poster : "",
+      rating:
+        omdb.imdbRating !== "N/A"
+          ? Math.round(parseFloat(omdb.imdbRating))
+          : "",
+    };
+
+    res.json(result);
+  } catch (err) {
+    console.error("getOMDBDetails error:", err.message);
+    res.status(500).json({ message: "Failed to fetch details" });
   }
 };
 
